@@ -152,6 +152,62 @@ jobs:
           
           Write-Host "Tor Browser configured for auto-connect"
 
+      - name: Uninstall Old Chrome and Install Latest Version
+        run: |
+          Write-Host "=== CHROME INSTALLATION ==="
+          
+          # DÃ©sinstaller l'ancienne version de Chrome
+          Write-Host "Uninstalling old Chrome version..."
+          try {
+              $chromeUninstallPath = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Google Chrome" -ErrorAction SilentlyContinue
+              if ($chromeUninstallPath) {
+                  $uninstallString = $chromeUninstallPath.UninstallString
+                  if ($uninstallString) {
+                      Write-Host "Found Chrome installation, uninstalling..."
+                      Start-Process -FilePath "cmd.exe" -ArgumentList "/c $uninstallString --force-uninstall" -Wait -NoNewWindow
+                      Write-Host "Old Chrome uninstalled successfully"
+                  }
+              } else {
+                  Write-Host "No existing Chrome installation found"
+              }
+          } catch {
+              Write-Host "Chrome uninstall skipped: $($_.Exception.Message)"
+          }
+          
+          # Attendre que la dÃ©sinstallation soit complÃ¨te
+          Start-Sleep -Seconds 3
+          
+          # TÃ©lÃ©charger et installer la derniÃ¨re version de Chrome
+          Write-Host "Downloading latest Chrome version..."
+          $chromeUrl = "https://dl.google.com/chrome/install/latest/chrome_installer.exe"
+          $chromeInstaller = "$env:TEMP\chrome_installer.exe"
+          
+          try {
+              Invoke-WebRequest -Uri $chromeUrl -OutFile $chromeInstaller -UseBasicParsing
+              Write-Host "Chrome installer downloaded"
+              
+              Write-Host "Installing Chrome..."
+              Start-Process -FilePath $chromeInstaller -ArgumentList "/silent", "/install" -Wait -NoNewWindow
+              
+              # VÃ©rifier l'installation
+              Start-Sleep -Seconds 5
+              $chromePath = "C:\Program Files\Google\Chrome\Application\chrome.exe"
+              if (Test-Path $chromePath) {
+                  $version = (Get-Item $chromePath).VersionInfo.ProductVersion
+                  Write-Host "Chrome installed successfully - Version: $version"
+              } else {
+                  Write-Host "WARNING: Chrome installation verification failed"
+              }
+              
+              # Nettoyer
+              Remove-Item $chromeInstaller -Force -ErrorAction SilentlyContinue
+              
+          } catch {
+              Write-Host "ERROR: Chrome installation failed: $($_.Exception.Message)"
+          }
+          
+          Write-Host "Chrome installation completed"
+
       - name: Install Python Dependencies
         run: |
           Write-Host "Installing Python packages with specific versions..."
@@ -335,16 +391,7 @@ jobs:
               $bat1Content = "@echo off`ncd /d D:\Script`nstart `"Residential GUI`" cmd /k python.exe usa_residential_gui.py"
               $bat1Content | Out-File -FilePath "$desktopPath\Launch-Residential.bat" -Encoding ASCII -Force
               
-              $bat2Content = @'
-@echo off
-cd /d D:\Script
-where wt >nul 2>&1
-if %errorlevel% equ 0 (
-    start wt -d "D:\Script" python FINAL_3_WINDOWS_TRUSTWORTHY-Parfait.py
-) else (
-    start powershell -NoExit -Command "cd D:\Script; python FINAL_3_WINDOWS_TRUSTWORTHY-Parfait.py"
-)
-'@
+              $bat2Content = "@echo off`ncd /d D:\Script`nwhere wt >nul 2>&1`nif %errorlevel% equ 0 (`n    start wt -d `"D:\Script`" python FINAL_3_WINDOWS_TRUSTWORTHY-Parfait.py`n) else (`n    start powershell -NoExit -Command `"cd D:\Script; python FINAL_3_WINDOWS_TRUSTWORTHY-Parfait.py`"`n)"
               $bat2Content | Out-File -FilePath "$desktopPath\Launch-Trustworthy.bat" -Encoding ASCII -Force
               
               $batAllContent = "@echo off`ncd /d D:\Script`necho Launching Python scripts...`nstart `"Residential GUI`" cmd /k python.exe usa_residential_gui.py`ntimeout /t 2 /nobreak >nul`nstart `"Trustworthy`" cmd /k python.exe FINAL_3_WINDOWS_TRUSTWORTHY-Parfait.py`necho Scripts launched!"
@@ -352,9 +399,20 @@ if %errorlevel% equ 0 (
               
               $torBatchContent = "@echo off`ncd /d `"C:\Tor Browser\Browser`"`nstart firefox.exe"
               $torBatchContent | Out-File -FilePath "$desktopPath\Tor Browser.bat" -Encoding ASCII -Force
+              
+              # CrÃ©er launcher pour le Dashboard (serveur tracking)
+              $dashboardContent = "@echo off`ncd /d D:\Script\RDP-Scripts`nstart `"Dashboard Server`" cmd /k python rdp_tracker.py"
+              $dashboardContent | Out-File -FilePath "$desktopPath\Launch-Dashboard.bat" -Encoding ASCII -Force
           }
           
           Write-Host "Desktop launchers created in all user desktops"
+          
+          # CrÃ©er un script de dÃ©marrage automatique pour le dashboard
+          Write-Host "Creating auto-start script for dashboard..."
+          $startupFolder = "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\StartUp"
+          $autoStartDashboard = "@echo off`ncd /d D:\Script\RDP-Scripts`nstart /min cmd /c python rdp_tracker.py"
+          $autoStartDashboard | Out-File -FilePath "$startupFolder\Auto-Start-Dashboard.bat" -Encoding ASCII -Force
+          Write-Host "Dashboard auto-start configured"
 
       - name: Install Tailscale
         run: |
@@ -441,20 +499,15 @@ if %errorlevel% equ 0 (
           $bat1 = "@echo off`ncd /d D:\Script`nstart `"Residential GUI`" cmd /k python.exe usa_residential_gui.py"
           $bat1 | Out-File -FilePath "$toolboxDesktop\Launch-Residential.bat" -Encoding ASCII -Force
           
-          $bat2 = @'
-@echo off
-cd /d D:\Script
-where wt >nul 2>&1
-if %errorlevel% equ 0 (
-    start wt -d "D:\Script" python FINAL_3_WINDOWS_TRUSTWORTHY-Parfait.py
-) else (
-    start powershell -NoExit -Command "cd D:\Script; python FINAL_3_WINDOWS_TRUSTWORTHY-Parfait.py"
-)
-'@
+          $bat2 = "@echo off`ncd /d D:\Script`nwhere wt >nul 2>&1`nif %errorlevel% equ 0 (`n    start wt -d `"D:\Script`" python FINAL_3_WINDOWS_TRUSTWORTHY-Parfait.py`n) else (`n    start powershell -NoExit -Command `"cd D:\Script; python FINAL_3_WINDOWS_TRUSTWORTHY-Parfait.py`"`n)"
           $bat2 | Out-File -FilePath "$toolboxDesktop\Launch-Trustworthy.bat" -Encoding ASCII -Force
           
           $batAll = "@echo off`ncd /d D:\Script`necho Launching Python scripts...`nstart `"Residential GUI`" cmd /k python.exe usa_residential_gui.py`ntimeout /t 2 /nobreak >nul`nstart `"Trustworthy`" cmd /k python.exe FINAL_3_WINDOWS_TRUSTWORTHY-Parfait.py`necho Scripts launched!"
           $batAll | Out-File -FilePath "$toolboxDesktop\Launch-ALL-Scripts.bat" -Encoding ASCII -Force
+          
+          # CrÃ©er launcher pour le Dashboard dans TOOLBOXLAP Desktop
+          $dashboardBat = "@echo off`ncd /d D:\Script\RDP-Scripts`nstart `"Dashboard Server`" cmd /k python rdp_tracker.py"
+          $dashboardBat | Out-File -FilePath "$toolboxDesktop\Launch-Dashboard.bat" -Encoding ASCII -Force
           
           # CrÃ©er un script PowerShell pour activer le toggle et lancer Tor
           $torScriptPath = "$toolboxDesktop\Launch-Tor.ps1"
